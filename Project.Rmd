@@ -1,0 +1,257 @@
+---
+title: "Advanced R - Term Project"
+author: "Ozgur Polat, Bugra Duman"
+date: "5/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Library Imports
+
+```{r warning=FALSE, message=FALSE}
+#install.packages("maps")
+#install.packages("sp")
+#install.packages("mapdata")
+library(shiny)
+library(dplyr)
+library(tidyverse)
+library(DT)
+library(shinythemes)
+library(knitr)
+library(flexdashboard)
+library(plotly)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(rvest)
+library(magrittr)
+library(ggmap)
+library(stringr)
+library(maps)
+library(mapdata)
+library(maptools)
+```
+
+### Importing The Data
+
+```{r, warning=FALSE}
+protein <- read.csv2("data/protein.csv", header=TRUE, sep=";")
+head(protein)
+
+# Some columns are gathered as factors. We need them as numeric.
+protein[,-1] <- lapply(protein[,-1], function(x) as.numeric(as.character(x)))
+
+```
+
+
+### DPLYR and TIDYR Section
+```{r message=TRUE, warning=FALSE}
+#Following columns are in the form of percentages over the population and we need them as in number of people. So appropriate calculations are done here.
+
+col_to_bind <- as.data.frame(apply(protein[c("Confirmed","Deaths","Recovered","Active","Population")],2,as.numeric))
+
+nums<- col_to_bind %>% transmute(Confirmed = Population * Confirmed / 100, 
+  Active = Population * Active / 100,
+  Recovered = Population * Recovered / 100,
+  Deaths = Population * Deaths / 100)
+
+protein <-subset(protein, select = -c(Confirmed,Deaths,Recovered,Active,Unit..all.except.Population.,X))
+
+
+protein <- cbind(protein,nums)
+```
+
+
+### Own S4 Class and Method For Each Country
+```{r message=TRUE, warning=FALSE}
+# Here we are turning each row into an S4 Class object which we could use them in the following calculations and visualizations. However, it is best to stick with our dataframe in this case. We would like to present our knowledge on S4 Classes and Object Oriented Programming but do not want to overcomplicate anything for the sake of extra points.
+country <- setClass("country",
+                    slots = list(cname = "character",
+                                 alcholic_beverages = "numeric",
+                                 animal_products = "numeric", 
+                                 animal_fats = "numeric",
+                                 aquatic_products = "numeric",
+                                 cereals = "numeric",
+                                 eggs = "numeric",
+                                 fish = "numeric",
+                                 fruits = "numeric",
+                                 meat = "numeric",
+                                 milk = "numeric",
+                                 offals = "numeric",
+                                 oilcrops = "numeric",
+                                 pulses = "numeric",
+                                 spices = "numeric",
+                                 starchy = "numeric",
+                                 stimulants = "numeric",
+                                 sugar_crops = "numeric",
+                                 sugar_and_sweeteners = "numeric",
+                                 treenuts = "numeric",
+                                 vegetal = "numeric",
+                                 vegetable_oils = "numeric",
+                                 vegetables = "numeric",
+                                 miscellaneous = "numeric",
+                                 obesity = "numeric",
+                                 undernourished = "numeric",
+                                 confirmed = "numeric",
+                                 deaths = "numeric",
+                                 recovered = "numeric",
+                                 active = "numeric",
+                                 population = "numeric"))
+
+#CLASS METHOD
+setMethod(f = "show", 
+          signature = "country", 
+          definition = function(object) {
+            a <- cat(object@cname, "\n")
+            b <- cat("Number of Confirmed Cases:", object@confirmed, "\n")
+            c <- cat("Number of Active Cases:", object@active, "\n")
+            d <- cat("Number of Recovered Cases:", object@recovered, "\n")
+            e <- cat("Number of Deaths:", object@deaths, "\n")
+            f <- paste(a,b,c,d,e)
+            
+            return(f)
+          }
+)
+
+#Creation of an empty list
+countries <- list()
+
+
+#EACH ROW IN THE DATASET WILL BECOME A COUNTRY OBJECT
+#iterating over the dataset
+for (row in 1:nrow(protein)) {
+  #creation of country objects for each row and appending them to the empty list initialized above
+  countries[as.character(protein$Country[row])] <- country(cname = as.character(protein$Country[row]),
+                                             alcholic_beverages = as.numeric(protein$Alcoholic.Beverages[row]),
+                                             animal_products = as.numeric(protein$Animal.Products[row]), 
+                                             animal_fats = as.numeric(protein$Animal.fats[row]),
+                                             aquatic_products = as.numeric(protein$Aquatic.Products..Other[row]),
+                                             cereals = as.numeric(protein$Cereals...Excluding.Beer[row]),
+                                             eggs = as.numeric(protein$Eggs[row]),
+                                             fish = as.numeric(protein$Fish..Seafood[row]),
+                                             fruits = as.numeric(protein$Fruits...Excluding.Wine[row]),
+                                             meat = as.numeric(protein$Meat[row]),
+                                             milk = as.numeric(protein$Milk...Excluding.Butter[row]),
+                                             offals = as.numeric(protein$Offals[row]),
+                                             oilcrops = as.numeric(protein$Oilcrops[row]),
+                                             pulses = as.numeric(protein$Pulses[row]),
+                                             spices = as.numeric(protein$Spices[row]),
+                                             starchy = as.numeric(protein$Starchy.Roots[row]),
+                                             stimulants = as.numeric(protein$Stimulants[row]),
+                                             sugar_crops = as.numeric(protein$Sugar.Crops[row]),
+                                             sugar_and_sweeteners = as.numeric(protein$Sugar...Sweeteners[row]),
+                                             treenuts = as.numeric(protein$Treenuts[row]),
+                                             vegetal = as.numeric(protein$Vegetal.Products[row]),
+                                             vegetable_oils = as.numeric(protein$Vegetable.Oils[row]),
+                                             vegetables = as.numeric(protein$Vegetables[row]),
+                                             miscellaneous = as.numeric(protein$Miscellaneous[row]),
+                                             obesity = as.numeric(protein$Obesity[row]),
+                                             undernourished = as.numeric(protein$Undernourished[row]),
+                                             confirmed = as.numeric(protein$Confirmed[row]),
+                                             deaths = as.numeric(protein$Deaths[row]),
+                                             recovered = as.numeric(protein$Recovered[row]),
+                                             active = as.numeric(protein$Active[row]),
+                                             population = as.numeric(protein$Population[row]))
+} 
+
+
+#As per seen below the object type is S4
+typeof(countries$Poland)
+
+#Here the S4 object automatically invokes the defined method
+countries$Poland
+countries$Turkey
+  
+#Here the object attribute is called
+#Normally this attribute should be called via a devoted get function for security purposes. However, following applications will not require us to use these class objects. Thus, there is not get methods for each of the attribute.
+countries$Turkey@fruits
+
+```
+
+
+### Own Function to Plot Country Shape
+Please run codes here in RStudio since visual outputs are different.
+```{r message=TRUE, warning=FALSE}
+#In this Own Function the trick is using the default value for the input variable. If variable is empty the function plots world map. If a country name is given then we get country plote. Moreover, you can pass as much as arguments you want and get the combination of ccountries.
+plot_map <- function(...){
+    x <- list(...)
+    map('worldHires', x) 
+}
+
+plot_map()
+plot_map("Poland")
+plot_map("Turkey")
+plot_map("Turkey", "Poland")
+
+#Lets try to plot UK all together since it consists of more than one countries.
+plot_map('UK', 'Ireland', 'Isle of Man','Isle of Wight', 'Wales:Anglesey')
+
+```
+
+### Shiny Application
+
+```{r echo=FALSE}
+ui <- fluidPage(
+  theme = shinythemes::shinytheme('simplex'),
+  titlePanel("Country Statistics"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("first", "Select Country For Summary and Data Table", unique(protein$Country)), 
+      selectInput("second", "Select Variable For Histogram", colnames(protein[,-1]))
+      
+
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Summary", textOutput("titleSummary"), plotlyOutput('plot')),
+        tabPanel("Data Table", textOutput("titleTable"),  DT::DTOutput('table')),
+        tabPanel("Histogram", plotlyOutput('histogram'))
+      ),
+    )
+  )
+
+)
+
+server <- function(input, output, session){
+  output$plot <- renderPlotly({
+    newData <- protein  %>%
+      filter(Country == input$first)
+    myplot <- ggplot(newData, aes(x = `Country`, y = `Active`, color= `Deaths`)) +
+      geom_bar(stat = "identity",width = 0.1)+
+      theme_bw() +
+      theme(axis.text = element_text(size = 12))
+    ggplotly(myplot)
+  })
+  
+  output$histogram <- renderPlotly({
+    myplot <- ggplot(protein, aes_string(x='Country', y=input$second)) + 
+        geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    ggplotly(myplot)
+  })
+ 
+  
+  output$table <- DT::renderDT({
+    protein %>%
+      filter(Country == input$first) %>%
+      select(-1) %>%
+      t()
+  })
+  
+  output$titleSummary <- renderText({
+    paste("\n\n Statistics for ", input$first,":\n\n")
+  })
+  
+  output$titleTable <- renderText({
+    paste("\n\n Complete Data Table for ", input$first,":\n\n")
+  })
+
+
+}
+
+shinyApp(ui = ui, server = server)
+
+```
+
